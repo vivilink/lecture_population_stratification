@@ -104,7 +104,7 @@ genotypes_polymorphic <- data$genotypes[,polymorphic_snps]
 # write.table(x=fam, file="subset.fam", row.names = FALSE, sep=" ", quote=FALSE, col.names = FALSE)
 
 # phenotypes <- simulate_phenotypes_genetic_confounding(genotypes_polymorphic, summary_stats, num_causal_variants=200, heritability=0.7)
-phenotypes <- simulate_phenotypes_environmental_confounding(name_fam=paste(plink_prefix, ".fam", sep=''), offset=1000)
+phenotypes <- simulate_phenotypes_environmental_confounding(name_fam=paste(plink_prefix, ".fam", sep=''), offset=100)
 
 # add phenotype to plink .fam file
 fam <- read.table(paste(plink_prefix, ".fam", sep=''))

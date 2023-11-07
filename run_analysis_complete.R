@@ -9,7 +9,7 @@
 # definitions and functions
 #-----------------------------------
 
-setwd("/data/class_stratification/simulations3")
+setwd("/data/class_stratification/handout")
 plink_prefix <- "subset"
 
 
@@ -52,31 +52,33 @@ system(command)
 associations <- read.table(paste(plink_prefix,".PHENO1.glm.linear", sep=''), header=TRUE, comment.char="")
 
 # plot results
+par(mfrow=c(1,1))
+plot_manhattan_chr_plink2(associations, CHR=1)
 
 
 #--------------------------------------------------------------------------------------------------------
 # part 3: run PCA with plink and plot loadings for PC1 and PC2
 #--------------------------------------------------------------------------------------------------------
 
-# run plink pca
+# # run plink pca
 num_PCs <- 5
 command <- paste("plink2 --bfile ", plink_prefix," --pca ", num_PCs, " --out ", plink_prefix, sep='')
 system(command)
 
-
 # plot PCA
-
+PC_loadings <- read.table(paste(plink_prefix,".eigenvec", sep=''), header=FALSE)
+colnames(PC_loadings) <- c("Population", "Individual", paste("PC", 1:num_PCs, sep=''))
+plot(x=PC_loadings$PC1, y=PC_loadings$PC2, xlab="PC1", ylab="PC2")
 
 # plot PCA with different colors for each population label
-# define colors
 fam <- read.table("subset.fam", header=FALSE, sep=' ')
 colnames(fam) <- c("Population", "Individual", "PID", "MID", "Sex", "Phenotype")
 PC_loadings <- merge(PC_loadings, fam, by="Individual")
 colors <- rep("black", nrow(PC_loadings))
 colors[PC_loadings$Population.x == "TSI"] <- "blue"
 colors[PC_loadings$Population.x == "JPT"] <- "red"
-
-# plot
+plot(x=PC_loadings$PC1, y=PC_loadings$PC2, col = colors, xlab="PC1", ylab="PC2")
+legend("topleft", legend=c("CDX", "TSI", "JPT"), pch=1, col=c("black", "blue", "red"), bty='n')
 
 
 #--------------------------------------------------------------------------------------------------------
@@ -90,11 +92,8 @@ system(command)
 
 # read in plink results
 associations_withPCCorrection <- read.table(paste(plink_prefix,"_withPCCorrection.PHENO1.glm.linear", sep=''), header=TRUE, comment.char="")
-
-# keep only results for full model
 associations_withPCCorrection <- associations_withPCCorrection[associations_withPCCorrection$TEST == "ADD",]
-
-# make manhattan plot
+plot_manhattan_chr_plink2(associations_withPCCorrection, CHR=1, MAIN="PC stratification correction")
 
 
 #--------------------------------------------------------------------------------------------------------
@@ -102,29 +101,33 @@ associations_withPCCorrection <- associations_withPCCorrection[associations_with
 #--------------------------------------------------------------------------------------------------------
 # plot QQ
 par(mfrow=c(1,2))
-
+plot_qq(associations$P, MAIN="not corrected")
+plot_qq(associations_withPCCorrection$P, MAIN="PC corrected")
 
 #--------------------------------------------------------------------------------------------------------
 # part 5: Use GCTA to run GWAS with GRM
 #--------------------------------------------------------------------------------------------------------
 
 # download gcta https://yanglab.westlake.edu.cn/software/gcta/#Download
-command <- paste("./gcta-1.94.1 --mlma-loco --bfile ", plink_prefix, " --out ", plink_prefix, " --pheno ", plink_prefix, ".fam --mpheno 4", sep='')
+command <- paste("gcta-1.94.1-linux-kernel-3-x86_64/gcta-1.94.1 --mlma-loco --bfile ", plink_prefix, " --out ", plink_prefix, " --pheno ", plink_prefix, ".fam --mpheno 4", sep='')
 system(command)
 associations_withGRMCorrection <- read.table(paste(plink_prefix,".loco.mlma", sep=''), header=TRUE)
 
 #--------------------------------------------------------------------------------------------------------
-# part 6: plot manhattan for GCTA results
+# part 6: plot association
 #--------------------------------------------------------------------------------------------------------
 
 par(mfrow=c(1,1))
+plot_manhattan_chr_GCTA(association_results_GCTA=associations_withGRMCorrection, CHR=1, MAIN="GRM stratification correction")
 
 #--------------------------------------------------------------------------------------------------------
-# part 7: plot QQ for p-values resulting from 1) no correction 2) PC correction 3) GRM correction
+# part 7: plot QQ
 #--------------------------------------------------------------------------------------------------------
 
 par(mfrow=c(1,3))
-
+plot_qq(associations$P, MAIN="not corrected")
+plot_qq(associations_withPCCorrection$P, MAIN="PC corrected")
+plot_qq(associations_withGRMCorrection$p, MAIN="GRM corrected")
 
 #--------------------------------------------------------------------------------------------------------
 # part 8: plot phenotypes
@@ -132,3 +135,68 @@ par(mfrow=c(1,3))
 
 par(mfrow=c(1,1))
 pheno <- read.table("subset.fam")
+plot(density(pheno$V6[pheno$V1=="TSI"]), col="blue", main="phenotype distribution", xlab="phenotype", xlim=c(0,700))
+lines(density(pheno$V6[pheno$V1=="JPT"]), col="red")
+lines(density(pheno$V6[pheno$V1=="CDX"]), col="black")
+
+#--------------------------------------------------------------------------------------------------------
+# part 9: plot GRM
+#--------------------------------------------------------------------------------------------------------
+command <- paste("./gcta-1.94.1 --make-grm --bfile ", plink_prefix, " --out ", plink_prefix, sep='')
+command <- paste("plink2 --make-grm-bin --bfile ", plink_prefix, " --out ", plink_prefix, sep='')
+
+system(command)
+
+
+
+ReadGRMBin=function(prefix, AllN=F, size=4){
+  
+  #part of script that is from gcta website
+  sum_i=function(i){
+    return(sum(1:i))
+  }
+  BinFileName=paste(prefix,".grm.bin",sep="")
+  NFileName=paste(prefix,".grm.N.bin",sep="")
+  IDFileName=paste(prefix,".grm.id",sep="")
+  id = read.table(IDFileName)
+  n=dim(id)[1]
+  BinFile=file(BinFileName, "rb");
+  grm=readBin(BinFile, n=n*(n+1)/2, what=numeric(0), size=size)
+  NFile=file(NFileName, "rb");
+  if(AllN==T){
+    N=readBin(NFile, n=n*(n+1)/2, what=numeric(0), size=size)
+  }
+  else N=readBin(NFile, n=1, what=numeric(0), size=size)
+  i=sapply(1:n, sum_i)
+  
+  #written by me, putting parts together
+  diag=grm[i]
+  off=grm[-i]
+  m <- matrix(nrow=n, ncol=n)
+  m[upper.tri(m, diag=FALSE)] <- off
+  diag(m) <- diag
+  m[lower.tri(m)] <- t(m)[lower.tri(m)]
+  total_grm <- m
+  
+  return(list(diag=grm[i], off=grm[-i], id=id, N=N, total_grm=total_grm))
+}
+
+library("IMIFA")
+plot_hm <- function(egrm, title){
+  color = function(x)rev(heat.colors(x))
+  vbreaks=seq(range(egrm$total_grm)[1],range(egrm$total_grm)[2], by=0.0001)
+  print(vbreaks)
+  # png(paste(title,"_heatmap.png", sep=''), 1800, 1800)
+  pdf(paste(title,"_heatmap.pdf", sep=''), width=5, height = 5)
+  
+  print(range(egrm$total_grm))
+  h=heatmap(egrm$total_grm, main=title, col=color(length(vbreaks)-1), breaks=vbreaks, labRow=GRM$id$V1, labCol=GRM$id$V1, symm=TRUE, Rowv=NA, Colv=NA) # , 
+  # heat_legend(egrm$total_grm,
+  #             cols = color(length(vbreaks)-1),
+  #             breaks = vbreaks)
+  dev.off()
+  return(h)
+}
+
+GRM <- ReadGRMBin("subset")
+h <- plot_hm(egrm=GRM, title="")
