@@ -10,6 +10,7 @@
 #-----------------------------------
 
 setwd("/data/class_stratification/Data/FullDataLDPruned/provided")
+# setwd("/data/class_stratification/simulations2")
 plink_prefix <- "subset"
 
 
@@ -54,19 +55,19 @@ associations <- read.table(paste(plink_prefix,".PHENO1.glm.linear", sep=''), hea
 # plot results
 plot_manhattan_chr_plink2(associations, CHR=1)
 
-#? why are some p-values NA? Maybe because it's the ones that are not polymorphic? need to check
 
 #--------------------------------------------------------------------------------------------------------
 # part 3: run PCA with plink and plot loadings for PC1 and PC2
 #--------------------------------------------------------------------------------------------------------
 
 # # run plink pca
-command <- paste("plink2 --bfile ", plink_prefix," --pca 10 --out ", plink_prefix, sep='')
+num_PCs <- 5
+command <- paste("plink2 --bfile ", plink_prefix," --pca ", num_PCs, " --out ", plink_prefix, sep='')
 system(command)
 
 # plot PCA
 PC_loadings <- read.table(paste(plink_prefix,".eigenvec", sep=''), header=FALSE)
-colnames(PC_loadings) <- c("Zero", "Individual", paste("PC", 1:10, sep=''))
+colnames(PC_loadings) <- c("Pop", "Individual", paste("PC", 1:num_PCs, sep=''))
 plot(x=PC_loadings$PC1, y=PC_loadings$PC2, xlab="PC1", ylab="PC2")
 
 # plot PCA with different colors for each population label
@@ -78,7 +79,6 @@ colors[PC_loadings$Population == "JPT"] <- "red"
 plot(x=PC_loadings$PC1, y=PC_loadings$PC2, col = colors, xlab="PC1", ylab="PC2")
 legend("topleft", legend=c("CDX", "TSI", "JPT"), pch=1, col=c("black", "blue", "red"), bty='n')
 
-#? can you say something about the positioning of the populations in the PCA plot?
 
 #--------------------------------------------------------------------------------------------------------
 # part 4: run association while correcting for structure with PCs and plot
@@ -91,6 +91,7 @@ system(command)
 
 # read in plink results
 associations_withPCCorrection <- read.table(paste(plink_prefix,"_withPCCorrection.PHENO1.glm.linear", sep=''), header=TRUE, comment.char="")
+associations_withPCCorrection <- associations_withPCCorrection[associations_withPCCorrection$TEST == "ADD",]
 plot_manhattan_chr_plink2(associations_withPCCorrection, CHR=1, MAIN="PC stratification correction")
 
 
@@ -98,33 +99,23 @@ plot_manhattan_chr_plink2(associations_withPCCorrection, CHR=1, MAIN="PC stratif
 # part 5: Check p-value distribution
 #--------------------------------------------------------------------------------------------------------
 # plot QQ
-pdf(paste(plink_prefix,"_qqplots.pdf", sep=''), width=8, height=4)
 par(mfrow=c(1,2))
 plot_qq(associations$P, MAIN="not corrected")
 plot_qq(associations_withPCCorrection$P, MAIN="PC corrected")
-dev.off()
 
-
-# # make GRM with plink
-# command <- paste("plink2 --bfile ", plink_prefix," --fam ",plink_prefix,"_withPheno.fam --make-grm-bin --out ", plink_prefix, sep='')
-# system(command)
 
 #--------------------------------------------------------------------------------------------------------
 # part 5: Use GCTA to run GWAS with GRM
 #--------------------------------------------------------------------------------------------------------
 
-# GWAS with GRM
 # download gcta https://yanglab.westlake.edu.cn/software/gcta/#Download
 command <- paste("gcta-1.94.1-linux-kernel-3-x86_64/gcta-1.94.1 --mlma-loco --bfile ", plink_prefix, " --out ", plink_prefix, " --pheno ", plink_prefix, ".fam --mpheno 4", sep='')
-# command <- paste("plink2 --bfile ", plink_prefix," --fam ",plink_prefix,"_withPheno.fam --glm --out ", plink_prefix, "_withGRMCorrection --make-rel on-the-fly --covar ", plink_prefix, ".eigenvec", sep='')
 system(command)
 associations_withGRMCorrection <- read.table(paste(plink_prefix,".loco.mlma", sep=''), header=TRUE)
 
 #--------------------------------------------------------------------------------------------------------
 # part 6: plot association
 #--------------------------------------------------------------------------------------------------------
-
-# plot associations
 
 par(mfrow=c(1,1))
 plot_manhattan_chr_GCTA(association_results_GCTA=associations_withGRMCorrection, CHR=1, MAIN="GRM stratification correction")
@@ -133,14 +124,18 @@ plot_manhattan_chr_GCTA(association_results_GCTA=associations_withGRMCorrection,
 # part 7: plot QQ
 #--------------------------------------------------------------------------------------------------------
 
-# plot QQ
-pdf(paste(plink_prefix,"_qqplots.pdf", sep=''), width=12, height=4)
 par(mfrow=c(1,3))
 plot_qq(associations$P, MAIN="not corrected")
 plot_qq(associations_withPCCorrection$P, MAIN="PC corrected")
 plot_qq(associations_withGRMCorrection$p, MAIN="GRM corrected")
-dev.off()
-# plink2 --bfile filtered_data --linear --rel-cutoff 0.125 --covar grm_output.genome --covar-name KING-IBD --out gwas_output
 
 
+#--------------------------------------------------------------------------------------------------------
+# part 8: plot phenotypes
+#--------------------------------------------------------------------------------------------------------
 
+par(mfrow=c(1,1))
+pheno <- read.table("subset.fam")
+plot(density(pheno$V6[pheno$V1=="TSI"]), col="blue", main="phenotype distribution", xlab="phenotype", xlim=c(0,2000))
+lines(density(pheno$V6[pheno$V1=="JPT"]), col="red")
+lines(density(pheno$V6[pheno$V1=="CDX"]), col="black")
