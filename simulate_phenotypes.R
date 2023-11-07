@@ -5,7 +5,7 @@
 #BiocManager::install("snpStats")
 
 library("snpStats")
-setwd("/data/class_stratification/Data/FullDataLDPruned")
+setwd("/data/class_stratification/simulations2")
 
 
 simulate_phenotypes_genetic_confounding <- function(genotypes_polymorphic, summary_stats, num_causal_variants, heritability){
@@ -39,21 +39,21 @@ simulate_phenotypes_genetic_confounding <- function(genotypes_polymorphic, summa
   return(phenotypes)
 }
 
-simulate_phenotypes_environmental_confounding <- function(individuals, offset){
-  num_inds <- length(individuals)
+
+simulate_phenotypes_environmental_confounding <- function(name_fam, offset){
+  fam <- read.table(name_fam)
+  colnames(fam) <- c("FID", "IID", "PID", "MID", "Sex", "Phenotype")
+  num_inds <- length(fam$FID)
   phenotypes <- rnorm(n=num_inds, mean=300, sd=100)
-  names(phenotypes) <- individuals
-  
-  pop_info <- read.csv("/data/class_stratification/Data/FullDataLDPruned/provided/sample_names.csv", header=TRUE, sep=',')
-  TSI <- pop_info$Individual[pop_info$Population == "TSI"]
-  TSI <- intersect(TSI, names(phenotypes))
+  names(phenotypes) <- fam$IID
+  TSI <- fam$IID[fam$FID == "TSI"]
   phenotypes[TSI] <- phenotypes[TSI] + offset
   
   return(phenotypes)
 }
 
 # extract CDX and TSI from total data
-system(paste("plink2 --bfile allChroms_ALL.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes --maf 0.05 --geno 0.1 --hwe 1e-6 --mind 0.1 --keep sample_names_populations.txt --make-bed --out subset", sep=''))
+# system(paste("plink2 --bfile allChroms_ALL.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes --maf 0.05 --geno 0.1 --hwe 1e-6 --mind 0.1 --keep sample_names_populations.txt --make-bed --out subset", sep=''))
 
 
 # plink_prefix <- "/data/class_stratification/Data/CDX_10kSnps_ldPruned/CDX_unrels"
@@ -92,11 +92,22 @@ polymorphic_snps <- row.names(summary_stats[summary_stats$MAF > 0.01,])
 num_polymorphic_snps <- length(polymorphic_snps)
 genotypes_polymorphic <- data$genotypes[,polymorphic_snps]
 
-#simulate phenotypes
+#add population label to original fam
+# pop_info <- read.csv("/data/class_stratification/Data/FullDataLDPruned/provided/sample_names.csv", header=TRUE, sep=',')
+# colnames(pop_info) <- c("IID", "FID")
+# fam <- read.table(paste(plink_prefix, ".fam", sep=''), header=FALSE)
+# colnames(fam) <- c("FID", "IID", "PID", "MID", "Sex", "Phenotype")
+# fam <- merge(pop_info, fam, by="IID")
+# fam <- fam[,-which(colnames(fam) == "FID.y")]
+# colnames(fam)[colnames(fam) == "FID.x"] <- "FID"
+# fam <- cbind(fam$FID, fam$IID, fam$PID, fam$MID, fam$Sex, fam$Phenotype)
+# write.table(x=fam, file="subset.fam", row.names = FALSE, sep=" ", quote=FALSE, col.names = FALSE)
+
 # phenotypes <- simulate_phenotypes_genetic_confounding(genotypes_polymorphic, summary_stats, num_causal_variants=200, heritability=0.7)
-phenotypes <- simulate_phenotypes_environmental_confounding(individuals=data$fam$member, offset=100)
+phenotypes <- simulate_phenotypes_environmental_confounding(name_fam=paste(plink_prefix, ".fam", sep=''), offset=1000)
 
 # add phenotype to plink .fam file
 fam <- read.table(paste(plink_prefix, ".fam", sep=''))
-fam$V6 <- phenotypes
-write.table(fam, file=paste(plink_prefix, "_withPheno.fam", sep=''), row.names = FALSE, col.names = FALSE, sep = " ")
+fam[,6] <- phenotypes
+write.table(fam, file=paste(plink_prefix, ".fam", sep=''), row.names = FALSE, col.names = FALSE, sep = " ", quote = FALSE)
+
